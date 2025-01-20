@@ -1,9 +1,32 @@
 import telebot
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 from telebot import types
+import os
 
-TOKEN = 'Ваш токен'
+TOKEN_FILE = "teletoken.txt"
+
+
+def read_token_from_file(filename):
+    """
+    Читает токен Telegram из указанного файла.
+
+    :param filename: Имя файла токена.
+    :return: Строка токена.
+    """
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"Файл токена '{filename}' не найден. Убедитесь, что он существует!")
+
+    with open(filename, "r") as f:
+        token = f.read().strip()  # Читаем токен и удаляем лишние пробелы/переводы строк
+    if not token:
+        raise ValueError(f"Файл '{filename}' пуст. Убедитесь, что токен записан в файл.")
+    return token
+
+
+# Считываем токен из файла
+TOKEN = read_token_from_file(TOKEN_FILE)
+
 bot = telebot.TeleBot(TOKEN)
 
 user_states = {}  # тут будем хранить информацию о действиях пользователя
@@ -134,7 +157,8 @@ def get_options_keyboard():
     keyboard = types.InlineKeyboardMarkup()
     pixelate_btn = types.InlineKeyboardButton("Pixelate", callback_data="pixelate")
     ascii_btn = types.InlineKeyboardButton("ASCII Art", callback_data="ascii")
-    keyboard.add(pixelate_btn, ascii_btn)
+    invert_btn = types.InlineKeyboardButton("Invert Colors", callback_data="invert")
+    keyboard.add(pixelate_btn, ascii_btn, invert_btn)
     return keyboard
 
 
@@ -151,6 +175,9 @@ def callback_query(call):
     elif call.data == "ascii":
         bot.answer_callback_query(call.id, "Please send me the characters you want to use for ASCII art.")
         user_states[call.message.chat.id]['waiting_for_chars'] = True
+    elif call.data == "invert":  # Обработка нажатия кнопки "Invert Colors"
+        bot.answer_callback_query(call.id, "Inverting colors of your image...")
+        invert_and_send(call.message)
 
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('waiting_for_chars', False))
@@ -199,6 +226,50 @@ def ascii_and_send(message):
     ascii_chars = user_states[message.chat.id].get('ascii_chars', ASCII_CHARS)
     ascii_art = image_to_ascii(image_stream, ascii_chars=ascii_chars)
     bot.send_message(message.chat.id, f"```\n{ascii_art}\n```", parse_mode="MarkdownV2")
+
+def invert_colors(image):
+    """
+    Инвертирует цвета изображения.
+
+    :param image: Исходное изображение (PIL.Image).
+    :return: Изображение с инвертированными цветами (PIL.Image).
+    """
+    if image.mode == 'RGBA':
+        # Для прозрачных изображений обработка немного отличается
+        r, g, b, a = image.split()
+        rgb_image = Image.merge("RGB", (r, g, b))
+        inverted = ImageOps.invert(rgb_image)
+        r, g, b = inverted.split()
+        return Image.merge("RGBA", (r, g, b, a))
+    elif image.mode == 'RGB':
+        return ImageOps.invert(image)
+    else:
+        raise ValueError("Unsupported image mode for inversion!")  # Обработка других режимов изображения
+
+def invert_and_send(message):
+    """
+    Инвертирует цвета изображения и отправляет пользователю.
+
+    :param message: Объект сообщения, содержащий идентификатор фотографии.
+    """
+    photo_id = user_states[message.chat.id]['photo']  # Получаем ID фото
+    file_info = bot.get_file(photo_id)  # Запрашиваем информацию о файле
+    downloaded_file = bot.download_file(file_info.file_path)  # Скачиваем изображение
+
+    # Открываем изображение как поток байтов
+    image_stream = io.BytesIO(downloaded_file)
+    image = Image.open(image_stream)
+
+    # Инвертируем изображение с помощью нашей функции invert_colors
+    inverted_image = invert_colors(image)
+
+    # Сохраняем результат в поток байтов
+    output_stream = io.BytesIO()
+    inverted_image.save(output_stream, format="JPEG")
+    output_stream.seek(0)
+
+    # Отправляем инвертированное изображение обратно пользователю
+    bot.send_photo(message.chat.id, output_stream)
 
 
 bot.polling(none_stop=True)

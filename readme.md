@@ -15,7 +15,7 @@ Copy
    pip install pyTelegramBotAPI pillow
 - Создайте бота в Telegram с помощью BotFather и получите токен.
 
-- Замените значение переменной TOKEN в коде на ваш токен.
+- Создайте файл "teletoken.txt" куда сохраните ваш TOKEN. 
 
 ## Использование
 - Запустите бота:

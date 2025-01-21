@@ -158,7 +158,10 @@ def get_options_keyboard():
     pixelate_btn = types.InlineKeyboardButton("Pixelate", callback_data="pixelate")
     ascii_btn = types.InlineKeyboardButton("ASCII Art", callback_data="ascii")
     invert_btn = types.InlineKeyboardButton("Invert Colors", callback_data="invert")
+    horizontal_mirror_btn = types.InlineKeyboardButton("Mirror Horizontally", callback_data="mirror_horizontal")
+    vertical_mirror_btn = types.InlineKeyboardButton("Mirror Vertically", callback_data="mirror_vertical")
     keyboard.add(pixelate_btn, ascii_btn, invert_btn)
+    keyboard.add(horizontal_mirror_btn, vertical_mirror_btn)
     return keyboard
 
 
@@ -178,6 +181,12 @@ def callback_query(call):
     elif call.data == "invert":  # Обработка нажатия кнопки "Invert Colors"
         bot.answer_callback_query(call.id, "Inverting colors of your image...")
         invert_and_send(call.message)
+    elif call.data == "mirror_horizontal":
+        bot.answer_callback_query(call.id, "Reflecting your image horizontally...")
+        mirror_and_send(call.message, direction="horizontal")
+    elif call.data == "mirror_vertical":
+        bot.answer_callback_query(call.id, "Reflecting your image vertically...")
+        mirror_and_send(call.message, direction="vertical")
 
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('waiting_for_chars', False))
@@ -269,6 +278,47 @@ def invert_and_send(message):
     output_stream.seek(0)
 
     # Отправляем инвертированное изображение обратно пользователю
+    bot.send_photo(message.chat.id, output_stream)
+
+def mirror_image(image, direction="horizontal"):
+    """
+    Создает отражение изображения.
+
+    :param image: Исходное изображение (PIL.Image).
+    :param direction: Направление: 'horizontal' или 'vertical'.
+    :return: Отраженное изображение (PIL.Image).
+    """
+    if direction == "horizontal":
+        return image.transpose(Image.FLIP_LEFT_RIGHT)
+    elif direction == "vertical":
+        return image.transpose(Image.FLIP_TOP_BOTTOM)
+    else:
+        raise ValueError("Invalid direction! Use 'horizontal' or 'vertical'.")
+
+
+def mirror_and_send(message, direction):
+    """
+    Отражает изображение и отправляет пользователю.
+
+    :param message: Объект сообщения, содержащий идентификатор фотографии.
+    :param direction: Направление: 'horizontal' или 'vertical'.
+    """
+    photo_id = user_states[message.chat.id]['photo']
+    file_info = bot.get_file(photo_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+
+    image_stream = io.BytesIO(downloaded_file)
+    image = Image.open(image_stream)
+
+    # Отражаем изображение
+    mirrored_image = mirror_image(image, direction)
+
+    # Сохраняем результат в поток байтов
+    output_stream = io.BytesIO()
+    mirrored_image.save(output_stream, format="JPEG")
+    output_stream.seek(0)
+
+    # Отправляем отражённое изображение
     bot.send_photo(message.chat.id, output_stream)
 
 

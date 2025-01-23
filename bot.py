@@ -160,8 +160,10 @@ def get_options_keyboard():
     invert_btn = types.InlineKeyboardButton("Invert Colors", callback_data="invert")
     horizontal_mirror_btn = types.InlineKeyboardButton("Mirror Horizontally", callback_data="mirror_horizontal")
     vertical_mirror_btn = types.InlineKeyboardButton("Mirror Vertically", callback_data="mirror_vertical")
+    heatmap_btn = types.InlineKeyboardButton("Heatmap", callback_data="heatmap")
     keyboard.add(pixelate_btn, ascii_btn, invert_btn)
     keyboard.add(horizontal_mirror_btn, vertical_mirror_btn)
+    keyboard.add(heatmap_btn)
     return keyboard
 
 
@@ -187,6 +189,9 @@ def callback_query(call):
     elif call.data == "mirror_vertical":
         bot.answer_callback_query(call.id, "Reflecting your image vertically...")
         mirror_and_send(call.message, direction="vertical")
+    elif call.data == "heatmap":  # Новый случай для тепловой карты
+        bot.answer_callback_query(call.id, "Converting your image to a heatmap...")
+        heatmap_and_send(call.message)
 
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('waiting_for_chars', False))
@@ -320,6 +325,52 @@ def mirror_and_send(message, direction):
 
     # Отправляем отражённое изображение
     bot.send_photo(message.chat.id, output_stream)
+
+
+def convert_to_heatmap(image):
+    """
+    Преобразовывает изображение в тепловую карту.
+
+    :param image: Исходное изображение (PIL.Image).
+    :return: Изображение в виде тепловой карты (PIL.Image).
+    """
+    # Преобразуем изображение в оттенки серого
+    grayscale = image.convert("L")
+
+    # Применяем цветовую карту через ImageOps.colorize
+    # Синий для холодных областей, оранжевый для теплых
+    heatmap = ImageOps.colorize(
+        grayscale,
+        black="blue",  # Цвет для "темных" (холодных) областей
+        white="red"  # Цвет для "светлых" (теплых) областей
+    )
+    return heatmap
+
+def heatmap_and_send(message):
+    """
+    Преобразовывает изображение в тепловую карту и отправляет его пользователю.
+
+    :param message: Объект сообщения, содержащий идентификатор фотографии.
+    """
+    photo_id = user_states[message.chat.id]['photo']  # Получаем ID фото
+    file_info = bot.get_file(photo_id)  # Запрашиваем информацию о файле
+    downloaded_file = bot.download_file(file_info.file_path)  # Скачиваем изображение
+
+    # Открываем изображение как поток байтов
+    image_stream = io.BytesIO(downloaded_file)
+    image = Image.open(image_stream)
+
+    # Применяем тепловую карту через нашу функцию
+    heatmap_image = convert_to_heatmap(image)
+
+    # Сохраняем результат в поток байтов
+    output_stream = io.BytesIO()
+    heatmap_image.save(output_stream, format="JPEG")
+    output_stream.seek(0)
+
+    # Отправляем изображение тепловой карты обратно пользователю
+    bot.send_photo(message.chat.id, output_stream)
+
 
 
 bot.polling(none_stop=True)

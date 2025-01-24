@@ -161,9 +161,10 @@ def get_options_keyboard():
     horizontal_mirror_btn = types.InlineKeyboardButton("Mirror Horizontally", callback_data="mirror_horizontal")
     vertical_mirror_btn = types.InlineKeyboardButton("Mirror Vertically", callback_data="mirror_vertical")
     heatmap_btn = types.InlineKeyboardButton("Heatmap", callback_data="heatmap")
+    sticker_btn = types.InlineKeyboardButton("Resize for Sticker", callback_data="resize_for_sticker")
     keyboard.add(pixelate_btn, ascii_btn, invert_btn)
     keyboard.add(horizontal_mirror_btn, vertical_mirror_btn)
-    keyboard.add(heatmap_btn)
+    keyboard.add(heatmap_btn,sticker_btn)
     return keyboard
 
 
@@ -192,6 +193,9 @@ def callback_query(call):
     elif call.data == "heatmap":  # Новый случай для тепловой карты
         bot.answer_callback_query(call.id, "Converting your image to a heatmap...")
         heatmap_and_send(call.message)
+    elif call.data == "resize_for_sticker":
+        bot.answer_callback_query(call.id, "Resizing your image for sticker...")
+        resize_for_sticker_and_send(call.message)
 
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('waiting_for_chars', False))
@@ -370,6 +374,60 @@ def heatmap_and_send(message):
 
     # Отправляем изображение тепловой карты обратно пользователю
     bot.send_photo(message.chat.id, output_stream)
+
+
+def resize_for_sticker(image, max_size=512):
+    """
+    Изменяет размер изображения до максимально допустимого размера для стикеров Telegram.
+
+    :param image: Исходное изображение (PIL.Image).
+    :param max_size: Максимальная длина одной из сторон (по умолчанию 512 пикселей).
+    :return: Изображение подходящего размера (PIL.Image).
+    """
+    # Получаем текущий размер изображения
+    width, height = image.size
+
+    # Пропорциональное изменение сторон
+    if width > max_size or height > max_size:
+        if width > height:
+            new_width = max_size
+            new_height = int((height / width) * new_width)
+        else:
+            new_height = max_size
+            new_width = int((width / height) * new_height)
+
+        # Меняем размер изображения
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    return image
+
+def resize_for_sticker_and_send(message):
+    """
+    Изменяет размер изображения для стикера и отправляет его пользователю.
+
+    :param message: Объект сообщения, содержащий идентификатор фотографии.
+    """
+    photo_id = user_states[message.chat.id]['photo']  # Получаем ID фото
+    file_info = bot.get_file(photo_id)  # Запрашиваем информацию о файле
+    downloaded_file = bot.download_file(file_info.file_path)  # Скачиваем изображение
+
+    # Открываем изображение как поток байтов
+    image_stream = io.BytesIO(downloaded_file)
+    image = Image.open(image_stream)
+
+    # Изменяем размер изображения для стикера
+    resized_image = resize_for_sticker(image)
+
+    # Сохраняем результат в поток байтов
+    output_stream = io.BytesIO()
+    resized_image.save(output_stream, format="PNG")  # Стикер должен быть в формате PNG
+    output_stream.seek(0)
+
+    # Отправляем переработанное изображение обратно пользователю
+    bot.send_document(
+        message.chat.id,
+        output_stream,
+        visible_file_name="sticker_image.png",  # Здесь указываем имя файла
+        )
 
 
 

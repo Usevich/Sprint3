@@ -3,9 +3,18 @@ from PIL import Image, ImageOps
 import io
 from telebot import types
 import os
+import random
 
 TOKEN_FILE = "teletoken.txt"
-
+JOKES = [
+    "Какая разница между собакой и министром? Собака не брешет, когда сидит!",
+    "Программист заходит в бар, заказывает 1 пиво, потом еще 10, потом 111, а дальше бартендер спрашивает:"
+    " у вас все с системой чисел OК?",
+    "Если у вас плохое настроение – просто встаньте, подходите к розетке и... отключайте Wi-Fi у соседа.",
+    "Говорят, лучший багрепорт — это тот, который никто не видит. Значит, просто надо его называть ‘Expected Behaviour’.",
+    "– Привет! Как дела? \n– if (happy == true) then (me.happy = true).",
+    "Жена программиста: Купи хлеба, а если есть яйца, то десяток.\nПрограммист вернулся с десятью буханками хлеба.",
+]
 
 def read_token_from_file(filename):
     """
@@ -162,9 +171,11 @@ def get_options_keyboard():
     vertical_mirror_btn = types.InlineKeyboardButton("Mirror Vertically", callback_data="mirror_vertical")
     heatmap_btn = types.InlineKeyboardButton("Heatmap", callback_data="heatmap")
     sticker_btn = types.InlineKeyboardButton("Resize for Sticker", callback_data="resize_for_sticker")
+    joke_btn = types.InlineKeyboardButton("Random Joke", callback_data="random_joke")
     keyboard.add(pixelate_btn, ascii_btn, invert_btn)
     keyboard.add(horizontal_mirror_btn, vertical_mirror_btn)
     keyboard.add(heatmap_btn,sticker_btn)
+    keyboard.add(joke_btn)
     return keyboard
 
 
@@ -196,6 +207,9 @@ def callback_query(call):
     elif call.data == "resize_for_sticker":
         bot.answer_callback_query(call.id, "Resizing your image for sticker...")
         resize_for_sticker_and_send(call.message)
+    elif call.data == "random_joke":  # Событие для кнопки с шуткой
+        bot.answer_callback_query(call.id, "Here's a random joke for you!")
+        random_joke_and_send(call)
 
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('waiting_for_chars', False))
@@ -429,6 +443,14 @@ def resize_for_sticker_and_send(message):
         visible_file_name="sticker_image.png",  # Здесь указываем имя файла
         )
 
+def random_joke_and_send(call):
+    """
+    Отправляет случайную шутку пользователю.
+
+    :param call: Объект callback-запроса.
+    """
+    joke = random.choice(JOKES)  # Выбираем случайную шутку из списка
+    bot.send_message(call.message.chat.id, joke)  # Отправляем шутку пользователю
 
 
 bot.polling(none_stop=True)
